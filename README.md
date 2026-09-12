@@ -18,8 +18,7 @@
     <li>cd:访问指定目录（文件夹）</li>
     <li>ls/dir:列出当前文件夹内容</li>
     <li>mkdir:创建新文件夹</li>
-    >[!NOTE]
-    >图片示意：
+    图片示意：
     <img src='img/git.png' title="Git效果图">
   </ol>
 </ol>
