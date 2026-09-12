@@ -7,4 +7,12 @@
 <p>PDF文件版：<a href=https://github.com/Z-U-I-S/beginning/blob/main/%E4%B8%AA%E4%BA%BA%E7%AE%80%E5%8E%86.pdf>个人简介</a></p>
 <p>个人网站：<a href=https://github.com/Z-U-I-S/beginning/blob/main/>个人网站</a></p>
 <h3>3.通用素养</h3>
-<p>Git命令行用法</p>
+<ol>
+  <p>对分支与合并的理解:</p>
+  <ol>
+    分支：新建存档
+    合并：合并（覆盖？）存档（在没有冲突的情况下）
+  </ol>
+  <p>Git命令行用法</p>
+</ol>
+
