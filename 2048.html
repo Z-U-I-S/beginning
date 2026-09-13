@@ -1,0 +1,1478 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>2048 · 纯前端单文件小游戏</title>
+<!--
+  ============================================================================
+  2048 小游戏（纯前端单文件：HTML + CSS + JS，无任何框架 / 无网络依赖）
+  双击本文件即可在浏览器中直接运行。
+  功能：键盘 ↑↓←→ / WASD / 触屏滑动、多次撤回、当前分数 / 最高分 / 本局时长、
+        右侧历史战绩侧边栏（localStorage 持久化）、浅色深色主题、AI 自动演示。
+  ============================================================================
+-->
+<style>
+/* ==========================================================================
+   0. 主题变量：一套变量控制浅色 / 深色两套配色，切主题只需要换 data-theme
+   ========================================================================== */
+:root {
+  --gap: 12px;            /* 方块间距 */
+  --pad: 12px;            /* 棋盘内边距 */
+  --slide: 120ms;         /* 滑动动画时长（JS 里的 SLIDE_MS 必须与它一致） */
+  --radius: 16px;
+  --tile-radius: 10px;
+
+  --bg: #f4f1ec;
+  --panel: #ffffff;
+  --panel-2: #faf8f5;
+  --text: #35322e;
+  --muted: #8d867e;
+  --line: #e7e1d9;
+  --board-bg: #e9e3da;
+  --cell-bg: #d8d0c6;
+  --accent: #e8452f;
+  --accent-soft: rgba(232, 69, 47, .12);
+  --ok: #2f9e6a;
+  --shadow: 0 10px 30px rgba(60, 50, 40, .10);
+}
+html[data-theme="dark"] {
+  --bg: #191a1d;
+  --panel: #25272b;
+  --panel-2: #2c2f34;
+  --text: #f1eeea;
+  --muted: #a19a92;
+  --line: #34373c;
+  --board-bg: #303338;
+  --cell-bg: #3c4046;
+  --accent-soft: rgba(232, 69, 47, .22);
+  --shadow: 0 10px 30px rgba(0, 0, 0, .38);
+}
+
+/* ==========================================================================
+   1. 基础排版
+   ========================================================================== */
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  padding: 20px 16px 40px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", "Helvetica Neue", Arial, sans-serif;
+  transition: background .25s ease, color .25s ease;
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3 { margin: 0; }
+p { margin: 0; }
+button, select, input { font-family: inherit; }
+
+.app { max-width: 1080px; margin: 0 auto; }
+
+/* ==========================================================================
+   2. 顶部状态栏
+   ========================================================================== */
+.topbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 16px;
+  justify-content: space-between; margin-bottom: 18px;
+}
+.brand h1 {
+  font-size: 40px; letter-spacing: 1px; line-height: 1;
+  background: linear-gradient(135deg, #f2856f, #e8452f 45%, #c08a00);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.brand p { color: var(--muted); font-size: 13px; margin-top: 6px; }
+
+.stats { display: flex; flex-wrap: wrap; gap: 10px; }
+.stat {
+  min-width: 96px; padding: 8px 14px; border-radius: 12px; text-align: center;
+  background: var(--panel); box-shadow: var(--shadow); border: 1px solid var(--line);
+}
+.stat span { display: block; font-size: 12px; color: var(--muted); margin-bottom: 2px; }
+.stat strong { display: block; font-size: 22px; font-variant-numeric: tabular-nums; }
+.stat--best strong { color: var(--accent); }
+.stat--time strong { color: var(--ok); }
+.stat--pulse { animation: stat-pulse 420ms ease; }
+@keyframes stat-pulse {
+  0% { transform: scale(1); }
+  45% { transform: scale(1.12); }
+  100% { transform: scale(1); }
+}
+
+/* ==========================================================================
+   3. 主区域：左边棋盘 + 右边历史侧边栏
+   ========================================================================== */
+.layout { display: flex; gap: 20px; align-items: flex-start; }
+.stage { flex: 1 1 460px; min-width: 0; }
+.sidebar { flex: 0 0 320px; width: 320px; }
+
+/* 棋盘：用一个正方形盒子 + 绝对定位，方块靠 left / top 过渡实现滑动动画 */
+.board {
+  position: relative;
+  width: 100%; max-width: 460px; aspect-ratio: 1 / 1;
+  margin: 0 auto;
+  padding: var(--pad);
+  background: var(--board-bg);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  touch-action: none;   /* 触屏滑动时禁止页面跟着滚动 */
+}
+.grid-bg {
+  position: absolute; inset: var(--pad);
+  display: grid; grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(4, 1fr);
+  gap: var(--gap);
+}
+.cell { background: var(--cell-bg); border-radius: var(--tile-radius); }
+
+.tile-layer { position: absolute; inset: var(--pad); }
+.tile {
+  position: absolute; left: 0; top: 0;
+  width: calc(25% - var(--gap) * 0.75);
+  height: calc(25% - var(--gap) * 0.75);
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--tile-radius);
+  font-weight: 800; line-height: 1;
+  color: #fff;
+  user-select: none;
+  transition: left var(--slide) ease-in-out, top var(--slide) ease-in-out;
+  will-change: left, top;
+}
+/* 四位数 / 五位数方块字号自动变小，避免溢出 */
+.tile[data-len="1"], .tile[data-len="2"] { font-size: clamp(18px, 7.4vw, 32px); }
+.tile[data-len="3"] { font-size: clamp(16px, 6.2vw, 27px); }
+.tile[data-len="4"] { font-size: clamp(13px, 5vw, 22px); }
+.tile[data-len="5"], .tile[data-len="6"] { font-size: clamp(11px, 4vw, 17px); }
+/* 浅色方块（4 / 8 / 16 / 128 …）上的白字加投影才看得清 */
+.tile--shadow { text-shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 0 4px rgba(0, 0, 0, .3); }
+/* 底色极浅的方块（4 / 8 / 16）用更重的投影，保证白字依然清晰可读 */
+.tile--shadow-strong { text-shadow: 0 1px 3px rgba(0, 0, 0, .68), 0 0 6px rgba(0, 0, 0, .45); }
+
+@keyframes tile-appear { from { opacity: 0; transform: scale(.3); } to { opacity: 1; transform: scale(1); } }
+@keyframes tile-merge {
+  0% { opacity: 0; transform: scale(.3); }
+  60% { opacity: 1; transform: scale(1.16); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.tile--new { animation: tile-appear 160ms ease-out var(--slide) both; }
+.tile--merged { animation: tile-merge 200ms ease-out var(--slide) both; }
+
+/* 棋盘上的“本局结束 / 达成 2048”浮层 */
+.board-overlay {
+  position: absolute; inset: 0; z-index: 50;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  border-radius: var(--radius);
+  background: rgba(250, 248, 245, .86);
+  backdrop-filter: blur(2px);
+  animation: fade-in .25s ease;
+}
+html[data-theme="dark"] .board-overlay { background: rgba(20, 21, 24, .82); }
+.board-overlay[hidden] { display: none; }
+.board-overlay h2 { font-size: 34px; letter-spacing: 1px; }
+.board-overlay p { color: var(--muted); font-size: 14px; }
+.overlay-actions { display: flex; gap: 10px; margin-top: 8px; }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* ==========================================================================
+   4. 按钮 / 工具栏
+   ========================================================================== */
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin: 16px auto 0; max-width: 460px; }
+.btn {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  padding: 9px 14px;
+  border-radius: 10px;
+  font-size: 14px;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .05);
+  transition: transform .12s ease, background .2s ease, border-color .2s ease, opacity .2s ease;
+}
+.btn:hover { transform: translateY(-1px); border-color: var(--accent); }
+.btn:active { transform: translateY(0) scale(.98); }
+.btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+.btn--primary { background: linear-gradient(135deg, #f2856f, #e8452f); color: #fff; border-color: transparent; }
+.btn--danger { color: var(--accent); }
+.btn--small { padding: 6px 10px; font-size: 12px; }
+.btn--on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.badge {
+  display: inline-block; min-width: 18px; padding: 0 5px; margin-left: 2px;
+  border-radius: 9px; background: var(--accent); color: #fff;
+  font-size: 11px; line-height: 18px; text-align: center;
+}
+.select-wrap { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.select-wrap select {
+  padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--panel); color: var(--text); cursor: pointer;
+}
+
+/* AI 状态条 */
+.ai-panel {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  max-width: 460px; margin: 12px auto 0; padding: 10px 14px;
+  border: 1px dashed var(--line); border-radius: 12px;
+  background: var(--panel-2); font-size: 12px; color: var(--muted);
+}
+.ai-panel .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+.ai-panel .dot.on { background: var(--ok); animation: blink 1.1s infinite; }
+@keyframes blink { 50% { opacity: .25; } }
+.ai-panel #aiStatus { color: var(--text); font-size: 13px; }
+.ai-meta { margin-left: auto; font-variant-numeric: tabular-nums; }
+
+/* ==========================================================================
+   5. 右侧历史战绩侧边栏
+   ========================================================================== */
+.panel {
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 16px; box-shadow: var(--shadow);
+}
+.panel-title { font-size: 16px; margin-bottom: 12px; padding-left: 10px; border-left: 4px solid var(--accent); line-height: 1.1; }
+.summary { display: flex; gap: 8px; margin-bottom: 12px; }
+.summary > div { flex: 1; text-align: center; background: var(--panel-2); border-radius: 10px; padding: 8px 4px; }
+.summary span { display: block; font-size: 11px; color: var(--muted); }
+.summary strong { font-size: 17px; font-variant-numeric: tabular-nums; }
+
+.history { list-style: none; margin: 0; padding: 0; max-height: 380px; overflow-y: auto; }
+.history li {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px; margin-bottom: 6px; border-radius: 10px;
+  background: var(--panel-2); font-size: 12px; color: var(--muted);
+  border: 1px solid transparent;
+}
+.history li.is-new {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  animation: record-in 500ms ease;
+}
+@keyframes record-in { from { transform: translateX(14px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+.history .rk { width: 26px; flex: 0 0 auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+.history .main { flex: 1 1 auto; min-width: 0; }
+.history .sc { font-size: 15px; font-weight: 700; color: var(--text); }
+.history .sm { font-size: 11px; color: var(--muted); }
+.history .tag {
+  display: inline-block; padding: 1px 5px; margin-left: 4px; border-radius: 6px;
+  font-size: 10px; background: var(--accent); color: #fff; vertical-align: 1px;
+}
+.history .tag--ai { background: #4a7fd6; }
+.empty-hint { color: var(--muted); font-size: 12px; text-align: center; padding: 14px 0; }
+.empty-hint[hidden] { display: none; }
+.panel-actions { display: flex; gap: 8px; margin-top: 12px; }
+
+/* ==========================================================================
+   6. 底部：游戏说明 / 游戏玩法
+   ========================================================================== */
+.help { display: flex; flex-wrap: wrap; gap: 20px; margin-top: 22px; }
+.help > article { flex: 1 1 340px; }
+.help ul { margin: 0; padding-left: 18px; }
+.help li { font-size: 13px; line-height: 1.95; color: var(--muted); }
+.help li b { color: var(--text); }
+.kbd {
+  display: inline-block; padding: 1px 7px; margin: 0 1px;
+  border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 6px;
+  background: var(--panel-2); font-size: 12px; color: var(--text);
+}
+
+/* ==========================================================================
+   7. 窄屏适配：侧边栏移到棋盘下面
+   ========================================================================== */
+@media (max-width: 900px) {
+  .layout { flex-direction: column; }
+  .sidebar { flex: 1 1 auto; width: 100%; }
+  .history { max-height: 260px; }
+  .brand h1 { font-size: 32px; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ================= 顶部：分数 / 最高分 / 本局时长 ================= -->
+  <header class="topbar">
+    <div class="brand">
+      <h1>2048</h1>
+      <p>纯前端单文件 · 键盘 / 触屏 / AI 自动演示</p>
+    </div>
+    <div class="stats">
+      <div class="stat" id="statScoreBox"><span>当前分数</span><strong id="statScore">0</strong></div>
+      <div class="stat stat--best"><span>历史最高分</span><strong id="statBest">0</strong></div>
+      <div class="stat stat--time"><span>本局时长</span><strong id="statTimer">00:00</strong></div>
+      <div class="stat"><span>本局步数</span><strong id="statMoves">0</strong></div>
+      <div class="stat"><span>已玩局数</span><strong id="statRounds">0</strong></div>
+    </div>
+  </header>
+
+  <!-- ================= 主区域 ================= -->
+  <main class="layout">
+    <!-- 左：棋盘 + 工具栏 + AI 状态 -->
+    <section class="stage">
+      <div class="board" id="board">
+        <div class="grid-bg" id="gridBg"></div>
+        <div class="tile-layer" id="tileLayer"></div>
+        <div class="board-overlay" id="boardOverlay" hidden>
+          <h2 id="overlayTitle"></h2>
+          <p id="overlayText"></p>
+          <div class="overlay-actions" id="overlayActions"></div>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <button class="btn btn--primary" id="btnNew">新游戏</button>
+        <button class="btn" id="btnUndo">撤回 Ctrl+Z <span class="badge" id="undoCount">0</span></button>
+        <button class="btn" id="btnAI">AI 自动演示</button>
+        <label class="select-wrap">速度
+          <select id="aiSpeed">
+            <option value="slow">慢</option>
+            <option value="normal" selected>中</option>
+            <option value="fast">快</option>
+          </select>
+        </label>
+        <button class="btn" id="btnTheme">切换深色</button>
+        <button class="btn btn--danger" id="btnReset">重置记录</button>
+      </div>
+
+      <div class="ai-panel">
+        <span class="dot" id="aiDot"></span>
+        <span id="aiStatus">AI 未启动</span>
+        <span class="ai-meta" id="aiMeta">目标：合出 1024（2048 为加分项）</span>
+      </div>
+    </section>
+
+    <!-- 右：历史分数记录侧边栏 -->
+    <aside class="sidebar">
+      <div class="panel">
+        <h2 class="panel-title">历史分数记录</h2>
+        <div class="summary">
+          <div><span>总局数</span><strong id="sumRounds">0</strong></div>
+          <div><span>最高分</span><strong id="sumBest">0</strong></div>
+          <div><span>平均分</span><strong id="sumAvg">0</strong></div>
+        </div>
+        <ol class="history" id="historyList"></ol>
+        <p class="empty-hint" id="historyEmpty">还没有对局记录，先玩一局吧。</p>
+        <div class="panel-actions">
+          <button class="btn btn--small" id="btnToggleAll">查看完整记录</button>
+          <button class="btn btn--small btn--danger" id="btnClearHistory">清空记录</button>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- ================= 底部：游戏说明 / 游戏玩法 ================= -->
+  <section class="help">
+    <article class="panel">
+      <h2 class="panel-title">游戏说明</h2>
+      <ul>
+        <li><b>玩法目标</b>：在 4×4 棋盘上合并数字方块，尽力合出 <b>2048</b>。合出的数字越大，分数越高。</li>
+        <li><b>合并规则</b>：每一步所有方块一起朝指定方向滑动到底；两块<b>数字相同</b>的方块相撞会合并成它们的和，并加同等数值的分数（一次移动中同一块只参与一次合并）。</li>
+        <li><b>新方块</b>：每次有效移动后，棋盘空位会随机出现一个新方块，90% 是 2，10% 是 4。</li>
+        <li><b>胜负判定</b>：任一方块达到 2048 即视为达成目标（可继续挑战更大数字）；棋盘填满且任何方向都无法合并时本局结束。</li>
+        <li><b>分数与记录</b>：当前分数、历史最高分、总局数与每局战绩都保存在浏览器本地（localStorage），关闭或刷新页面后依然保留。</li>
+      </ul>
+    </article>
+    <article class="panel">
+      <h2 class="panel-title">游戏玩法</h2>
+      <ul>
+        <li><b>移动</b>：按键盘 <span class="kbd">↑</span><span class="kbd">↓</span><span class="kbd">←</span><span class="kbd">→</span> 或 <span class="kbd">W</span><span class="kbd">A</span><span class="kbd">S</span><span class="kbd">D</span>；触屏设备直接在棋盘上滑动。</li>
+        <li><b>多次撤回</b>：按 <span class="kbd">Ctrl</span>+<span class="kbd">Z</span> 或点「撤回」，可在本局内连续撤回任意多步（按钮上的数字是剩余可撤回步数）。走成死局也能撤回救回来。</li>
+        <li><b>新游戏</b>：开始新一局，并把上一局成绩自动追加到右侧历史记录。</li>
+        <li><b>AI 自动演示</b>：点「AI 自动演示」后由 Expectimax 算法自动操作，全程无需人工干预；可选慢 / 中 / 快三档速度。</li>
+        <li><b>主题</b>：「切换深色 / 浅色」一键换肤，刷新后仍然保留所选主题。</li>
+        <li><b>重置记录</b>：清空历史最高分与全部战绩（会二次确认）。</li>
+      </ul>
+    </article>
+  </section>
+</div>
+
+<script>
+'use strict';
+/* ============================================================================
+ * 文件名：2048.html
+ * 说  明：2048 小游戏全部逻辑（单文件，无框架依赖）
+ * 结  构：1 工具函数 → 2 纯逻辑核心(可离线测试) → 3 状态 → 4 渲染
+ *          → 5 游戏流程 → 6 记录与存储 → 7 主题 → 8 输入 → 9 AI 演示 → 10 初始化
+ * ==========================================================================*/
+
+/* ==========================================================================
+ * 1. 工具函数
+ * ==========================================================================*/
+
+/** 按 id 取元素（简写，减少重复的 document.getElementById） */
+const $ = (id) => document.getElementById(id);
+
+/** 把毫秒格式化成 mm:ss（超过 1 小时显示 h:mm:ss） */
+function formatDuration(ms) {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const pad = (n) => String(n).padStart(2, '0');
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+}
+
+/** 把毫秒格式化成“x 分 y 秒”，用于历史记录 */
+function formatDurationCn(ms) {
+  const total = Math.max(0, Math.round(ms / 1000));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return m > 0 ? `${m} 分 ${s} 秒` : `${s} 秒`;
+}
+
+/** 时间戳格式化成 月-日 时:分 */
+function formatTime(ts) {
+  const d = new Date(ts);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/* ==========================================================================
+ * 2. 纯逻辑核心（CORE-LOGIC）
+ *    这一区域只处理“数字数组”，完全不碰 DOM，因此可以在 Node.js 里
+ *    单独抽出来做自动化测试（见 _tools/test-core.js）。
+ * ==========================================================================*/
+/* ==== CORE-LOGIC-START ==== */
+
+const SIZE = 4;                       // 棋盘边长
+const DIRECTIONS = ['left', 'right', 'up', 'down'];
+
+/**
+ * 计算第 i 条线（行或列）的 4 个格子坐标。
+ * 返回顺序固定为：最靠近“移动方向”的格子在前。
+ * 例：left → [i,0] [i,1] [i,2] [i,3]；right → [i,3] [i,2] [i,1] [i,0]
+ */
+function lineCoords(dir, i) {
+  const coords = [];
+  for (let j = 0; j < SIZE; j++) {
+    if (dir === 'left')  coords.push([i, j]);
+    if (dir === 'right') coords.push([i, SIZE - 1 - j]);
+    if (dir === 'up')    coords.push([j, i]);
+    if (dir === 'down')  coords.push([SIZE - 1 - j, i]);
+  }
+  return coords;
+}
+
+/**
+ * 单行（4 个数字）向左滑动 + 合并的规划。
+ * 输入：[2,2,4,0] 这样的数组；输出结果行 + 得分 + 一组“按执行顺序排好的动作”。
+ * 这是整个游戏最核心的算法：先取出非零块，再从左到右两两判断能否合并。
+ *
+ * ops 里的动作严格按“输出格子的下标”从小到大排列，这一点非常重要：
+ * 每个动作的目标格都小于后面动作的来源格，因此按顺序执行时，
+ * 绝不会把还没被搬走的方块覆盖掉（详见第七章的说明）。
+ */
+function planLine(cells) {
+  const ops = [];      // 动作表，顺序执行即可完成整条线的移动
+  const result = [];
+  let gained = 0;
+
+  // 1) 去掉空格，只留下有数字的方块，并记住它们原来的下标
+  const blocks = [];
+  for (let i = 0; i < cells.length; i++) {
+    if (cells[i] > 0) blocks.push({ value: cells[i], index: i });
+  }
+
+  // 2) 从左往右扫：相邻两个数字相同就合并，否则单独滑过去
+  let k = 0;
+  let outIndex = 0;                 // 输出行里的写指针
+  while (k < blocks.length) {
+    const cur = blocks[k];
+    const next = blocks[k + 1];
+    if (next && next.value === cur.value) {
+      const value = cur.value * 2;  // 合并后的新数字
+      ops.push({ kind: 'merge', from: [cur.index, next.index], to: outIndex, value });
+      result.push(value);
+      gained += value;              // 合并得分 = 新方块的数值
+      k += 2;                       // 两个块都被消耗掉
+    } else {
+      ops.push({ kind: 'slide', from: cur.index, to: outIndex });
+      result.push(cur.value);
+      k += 1;
+    }
+    outIndex++;
+  }
+  while (result.length < SIZE) result.push(0);  // 补空格
+
+  const moved = ops.some((op) => op.kind === 'merge' || op.from !== op.to);
+  return { result, gained, ops, moved };
+}
+
+/**
+ * 对整张棋盘执行一次移动（纯函数：不修改传入的 values）。
+ * values：4×4 二维数字数组；dir：'left' | 'right' | 'up' | 'down'
+ * 返回：{ board, gained, moved, ops }
+ *   board  —— 移动后的新棋盘（二维数组）
+ *   gained —— 本次合并得到的分数
+ *   moved  —— 是否真的发生了移动
+ *   ops    —— 动作表（棋盘坐标，已按安全顺序排列）
+ *             { kind:'slide', from:[r,c], to:[r,c] }
+ *             { kind:'merge', from:[[r,c],[r,c]], to:[r,c], value: 新数字 }
+ * 渲染层按 ops 顺序搬运方块，AI 只用 board，两边规则完全一致。
+ */
+function coreMoveBoard(values, dir) {
+  const board = values.map((row) => row.slice());   // 复制一份，避免改到原数据
+  const ops = [];
+  let gained = 0;
+  let moved = false;
+
+  for (let i = 0; i < SIZE; i++) {
+    const coords = lineCoords(dir, i);
+    const cells = coords.map(([r, c]) => board[r][c]);
+    const plan = planLine(cells);
+
+    if (plan.moved) moved = true;
+    gained += plan.gained;
+
+    for (const op of plan.ops) {
+      if (op.kind === 'merge') {
+        ops.push({
+          kind: 'merge',
+          from: [coords[op.from[0]], coords[op.from[1]]],
+          to: coords[op.to],
+          value: op.value,
+        });
+      } else {
+        ops.push({ kind: 'slide', from: coords[op.from], to: coords[op.to] });
+      }
+    }
+    coords.forEach(([r, c], k) => { board[r][c] = plan.result[k]; });
+  }
+  return { board, gained, moved, ops };
+}
+
+/** 棋盘上还有没有可以走的方向（有空格 或 相邻数字相同 就能走） */
+function coreHasMoves(values) {
+  for (let r = 0; r < SIZE; r++) {
+    for (let c = 0; c < SIZE; c++) {
+      if (values[r][c] === 0) return true;
+      if (c + 1 < SIZE && values[r][c] === values[r][c + 1]) return true;
+      if (r + 1 < SIZE && values[r][c] === values[r + 1][c]) return true;
+    }
+  }
+  return false;
+}
+
+/** 棋盘上最大的数字 */
+function coreMaxTile(values) {
+  let max = 0;
+  for (const row of values) for (const v of row) if (v > max) max = v;
+  return max;
+}
+
+/* ---------------------------- AI：Expectimax ---------------------------- */
+/*
+ * 思路：AI 每一次只做一件事——把 4 个方向都试一遍，然后估算“走哪一步之后
+ * 局面更好”。难点在于新方块会随机出现，所以搜索树里有两类节点：
+ *   ① 玩家节点：AI 可以选 4 个方向（取最大值 max）
+ *   ② 随机节点：棋盘随机多出一个 2(90%) 或 4(10%)（按概率求期望 average）
+ * 两层交替展开，这就是 Expectimax（期望最大）搜索。
+ * 搜索到底后用 evaluateExps() 给局面打分（空格越多越好、越有序越好、大数靠角越好）。
+ */
+
+/** 指数化棋盘：0 表示空，1 表示 2，2 表示 4 …… 用指数运算更快也更省内存 */
+function toExps(values) {
+  const out = new Array(SIZE * SIZE);
+  for (let r = 0; r < SIZE; r++) {
+    for (let c = 0; c < SIZE; c++) {
+      const v = values[r][c];
+      out[r * SIZE + c] = v > 0 ? Math.round(Math.log2(v)) : 0;
+    }
+  }
+  return out;
+}
+
+/** 4 个方向对应的“线索引表”，预计算一次，搜索时直接查表 */
+const LINE_INDEX = (() => {
+  const table = {};
+  for (const dir of DIRECTIONS) {
+    const lines = [];
+    for (let i = 0; i < SIZE; i++) {
+      lines.push(lineCoords(dir, i).map(([r, c]) => r * SIZE + c));
+    }
+    table[dir] = lines;
+  }
+  return table;
+})();
+
+/** 快速移动（AI 专用）：输入 / 输出都是 16 个指数的扁平数组 */
+function fastMove(exps, dir) {
+  const out = new Array(SIZE * SIZE);
+  let gained = 0;
+  let moved = false;
+  for (const line of LINE_INDEX[dir]) {
+    const vals = [];
+    for (let k = 0; k < SIZE; k++) if (exps[line[k]]) vals.push(exps[line[k]]);
+    let p = 0;
+    let oi = 0;
+    while (p < vals.length) {
+      if (p + 1 < vals.length && vals[p] === vals[p + 1]) {
+        const e = vals[p] + 1;          // 指数 +1 就等于数字翻倍
+        out[line[oi]] = e;
+        gained += 1 << e;               // 合并得分 = 新数字本身
+        p += 2;
+      } else {
+        out[line[oi]] = vals[p];
+        p += 1;
+      }
+      oi++;
+    }
+    while (oi < SIZE) { out[line[oi]] = 0; oi++; }
+    for (let k = 0; k < SIZE; k++) if (out[line[k]] !== exps[line[k]]) moved = true;
+  }
+  return { board: out, gained, moved };
+}
+
+/* ------------------------------ 局面评估 ------------------------------ */
+/**
+ * 评估权重：把“什么样的局面算好”量化成五个数字，系数越大表示越看重这一项。
+ * 这是 AI 的“价值观”，也是整个 AI 里最值得反复调的部分。
+ */
+const WEIGHTS = {
+  empty: 2.7,    // 空格数量：空格是活路，越多越安全
+  mono: 1.0,     // 单调性：每行每列尽量朝一个方向递增 / 递减
+  smooth: 0.1,   // 平滑度：相邻数字差越小越好
+  corner: 1.2,   // 最大数字待在四个角上
+  merges: 0.6,   // 相邻相同数字的对数：马上能合并才有分
+};
+
+/**
+ * 局面评估函数：分数越高，AI 认为这个局面越好。传入的是“指数棋盘”
+ * （0 表示空，1 表示 2，2 表示 4 ……）。五个因素的含义见上面的权重注释。
+ */
+function evaluateExps(exps) {
+  let empty = 0;
+  let maxExp = 0;
+  for (let i = 0; i < exps.length; i++) {
+    const e = exps[i];
+    if (e === 0) empty++;
+    else if (e > maxExp) maxExp = e;
+  }
+
+  // 单调性：逐行、逐列分别统计“递增的总幅度”和“递减的总幅度”，取较小者作为惩罚。
+  // 山峰形的排列两个方向落差都大，扣分多；整齐的阶梯形总有一个方向落差为 0，不扣分。
+  let mono = 0;
+  for (let r = 0; r < SIZE; r++) {
+    let inc = 0;
+    let dec = 0;
+    for (let c = 0; c < SIZE - 1; c++) {
+      const a = exps[r * SIZE + c];
+      const b = exps[r * SIZE + c + 1];
+      if (a > b) dec += a - b; else inc += b - a;
+    }
+    mono -= Math.min(inc, dec);
+  }
+  for (let c = 0; c < SIZE; c++) {
+    let inc = 0;
+    let dec = 0;
+    for (let r = 0; r < SIZE - 1; r++) {
+      const a = exps[r * SIZE + c];
+      const b = exps[(r + 1) * SIZE + c];
+      if (a > b) dec += a - b; else inc += b - a;
+    }
+    mono -= Math.min(inc, dec);
+  }
+
+  // 平滑度 + 可合并对数：只看右邻和下邻，每对相邻格子只算一次
+  let smooth = 0;
+  let merges = 0;
+  for (let r = 0; r < SIZE; r++) {
+    for (let c = 0; c < SIZE; c++) {
+      const cur = exps[r * SIZE + c];
+      if (cur === 0) continue;
+      if (c + 1 < SIZE) {
+        const right = exps[r * SIZE + c + 1];
+        if (right) {
+          smooth -= Math.abs(cur - right);
+          if (cur === right) merges++;
+        }
+      }
+      if (r + 1 < SIZE) {
+        const down = exps[(r + 1) * SIZE + c];
+        if (down) {
+          smooth -= Math.abs(cur - down);
+          if (cur === down) merges++;
+        }
+      }
+    }
+  }
+
+  // 大数字是否在四个角上（角上的大块不会被小方块推来推去，是 2048 最关键的一条策略）
+  const corners = [exps[0], exps[SIZE - 1], exps[(SIZE - 1) * SIZE], exps[SIZE * SIZE - 1]];
+  const maxInCorner = Math.max.apply(null, corners) === maxExp && maxExp > 0 ? 1 : 0;
+
+  return WEIGHTS.empty * empty
+    + WEIGHTS.mono * mono
+    + WEIGHTS.smooth * smooth
+    + WEIGHTS.corner * maxExp * maxInCorner
+    + WEIGHTS.merges * merges;
+}
+
+const now = (typeof performance !== 'undefined' && performance.now)
+  ? () => performance.now()
+  : () => Date.now();
+
+/**
+ * 从指数棋盘里找出所有空格下标 */
+function emptyIndices(exps) {
+  const list = [];
+  for (let i = 0; i < exps.length; i++) if (exps[i] === 0) list.push(i);
+  return list;
+}
+
+/** 搜索节点计数与超时控制（时间到了就提前收工，保证界面不卡） */
+let aiNodes = 0;
+let aiDeadline = Infinity;
+
+/** 概率剪枝阈值：整条分支的累计概率低于它就停止下探，直接用估值代替 */
+const AI_PROB_CUTOFF = 0.0001;
+
+function aiOutOfTime() {
+  return now() > aiDeadline;
+}
+
+/**
+ * Expectimax 递归搜索。返回值是“该局面下的期望得分”。
+ * @param exps     指数棋盘（扁平数组）
+ * @param depth    还能再走几步（玩家步数）
+ * @param isPlayer true = 玩家节点（取最大值 max），false = 随机节点（取期望）
+ * @param prob     到达该节点的累计概率，用于概率剪枝
+ */
+function expectimax(exps, depth, isPlayer, prob) {
+  aiNodes++;
+  if ((aiNodes & 1023) === 0 && aiOutOfTime()) return evaluateExps(exps);
+
+  if (isPlayer) {
+    if (depth === 0) return evaluateExps(exps);
+    let best = -Infinity;
+    let any = false;
+    for (const dir of DIRECTIONS) {
+      const res = fastMove(exps, dir);
+      if (!res.moved) continue;
+      any = true;
+      const value = expectimax(res.board, depth - 1, false, prob);
+      if (value > best) best = value;
+    }
+    return any ? best : evaluateExps(exps);
+  }
+
+  // 随机节点：在所有空格上分别放 2 / 4，按“条件概率”加权求和，结果就是期望值
+  const cells = emptyIndices(exps);
+  if (cells.length === 0) return evaluateExps(exps);
+
+  let total = 0;
+  for (const idx of cells) {
+    for (const pair of [[1, 0.9], [2, 0.1]]) {
+      const exp = pair[0];
+      const condProb = pair[1] / cells.length;   // 条件概率：所有子节点之和恰好为 1
+      const branchProb = prob * condProb;        // 累计概率：只用来决定要不要继续下探
+      const next = exps.slice();
+      next[idx] = exp;
+      // 累计概率太小的分支不再展开，直接按估值折算，避免搜索爆炸
+      total += branchProb < AI_PROB_CUTOFF
+        ? condProb * evaluateExps(next)
+        : condProb * expectimax(next, depth, true, branchProb);
+    }
+  }
+  // 注意这里返回的是“期望值”而不是“概率加权和”，所以不能再用累计概率缩放
+  return total;
+}
+
+/**
+ * AI 决策入口：返回最该走的方向，走不动时返回 null。
+ * @param values  4×4 数字棋盘
+ * @param options { maxDepth, timeBudget }
+ *                maxDepth   —— 最多搜几步（默认 5）
+ *                timeBudget —— 每步思考时间上限（毫秒，0 表示不限时）
+ * 采用“迭代加深”：先从 1 步搜起，一步步加深，时间用完就用上一层的结果。
+ */
+function aiChooseMove(values, options) {
+  options = options || {};
+  const maxDepth = options.maxDepth || 5;
+  const timeBudget = options.timeBudget || 0;
+
+  const start = now();
+  aiDeadline = timeBudget > 0 ? start + timeBudget : Infinity;
+  aiNodes = 0;
+
+  let exps = toExps(values);
+  let bestMove = null;
+  let bestList = [];
+  let reachedDepth = 0;
+
+  for (let depth = 1; depth <= maxDepth; depth++) {
+    const results = [];
+    for (const dir of DIRECTIONS) {
+      const res = fastMove(exps, dir);
+      if (!res.moved) continue;
+      results.push({ dir, score: expectimax(res.board, depth - 1, false, 1) });
+    }
+    if (results.length === 0) break;
+    if (aiOutOfTime() && depth > 1) break;      // 这一层没算完，丢弃
+    results.sort((a, b) => b.score - a.score);
+    bestMove = results[0].dir;
+    bestList = results;
+    reachedDepth = depth;
+    if (aiOutOfTime()) break;
+  }
+
+  return {
+    dir: bestMove,
+    depth: reachedDepth,
+    nodes: aiNodes,
+    candidates: bestList.map((r) => `${r.dir}:${Math.round(r.score)}`).join(' '),
+  };
+}
+/* ==== CORE-LOGIC-END ==== */
+
+/* ==========================================================================
+ * 3. 游戏状态与全局常量
+ * ==========================================================================*/
+const SLIDE_MS = 120;                 // 滑动动画时长，必须与 CSS 里的 --slide 一致
+const STORAGE_KEYS = {
+  best: 'game2048.best',              // 历史最高分
+  records: 'game2048.records',        // 历史战绩数组
+  theme: 'game2048.theme',            // 主题
+};
+const NEW_TILE_RATE = 0.9;            // 新方块出现 2 的概率（其余是 4）
+
+/** 数字 → 配色。浅色底上的白字需要加阴影（shadow: true 普通、'strong' 加重） */
+const TILE_STYLE = {
+  2:    { from: '#FFFFFF', to: '#FFFFFF', text: '#5f5b56', shadow: false }, // 白色底 → 数字用深灰才看得见
+  4:    { from: '#FEF7F5', to: '#FDEBE7', text: '#FFFFFF', shadow: 'strong' },
+  8:    { from: '#FDE3DC', to: '#FBD3CB', text: '#FFFFFF', shadow: 'strong' },
+  16:   { from: '#FAC3B8', to: '#F8B0A2', text: '#FFFFFF', shadow: 'strong' },
+  32:   { from: '#F79C8B', to: '#F2856F', text: '#FFFFFF', shadow: true },
+  64:   { from: '#F0634C', to: '#E8452F', text: '#FFFFFF', shadow: false }, // 红色
+  128:  { from: '#FCF6AF', to: '#FAF08C', text: '#FFFFFF', shadow: true }, // 浅黄
+  256:  { from: '#F8E87A', to: '#F6E14F', text: '#FFFFFF', shadow: true },
+  512:  { from: '#F4DC55', to: '#F0CF14', text: '#FFFFFF', shadow: true },
+  1024: { from: '#E8C33C', to: '#E0B400', text: '#FFFFFF', shadow: false },
+  2048: { from: '#D6A61C', to: '#C08A00', text: '#FFFFFF', shadow: false }, // 深黄
+};
+/** 4096 及以上：黑色底 + 白字 */
+const TILE_STYLE_HIGH = { from: '#2b2b2b', to: '#0a0a0a', text: '#FFFFFF', shadow: false };
+
+/* 三档速度：delay 是两步之间的间隔（毫秒），budget 是每步的“思考时间上限”。
+   深度 3 的完整搜索大约需要几十毫秒，所以“中”档能稳定跑完深度 3，“快”档接近它。 */
+const AI_SPEED = {
+  slow:   { delay: 300, budget: 350 },
+  normal: { delay: 60,  budget: 150 },
+  fast:   { delay: 15,  budget: 70 },
+};
+
+/** 棋盘的“真身”：4×4 的二维数组，每格放一个方块对象或 null */
+let board = [];
+let score = 0;                // 本局分数
+let best = 0;                 // 历史最高分
+let moves = 0;                // 本局步数
+let won = false;              // 本局是否已经合出 2048
+let roundEnded = false;       // 本局是否已经结束（结束=已写入历史记录）
+let roundStartAt = 0;         // 本局开始时间戳
+let roundFrozenMs = 0;        // 本局结束时的用时（结束后计时器停住）
+let undoStack = [];           // 撤回栈：每走一步压入一个快照
+let lastSavedRecordId = null; // 最近一条写入历史的记录 id（撤回时可以撤销这条记录）
+let uid = 0;                  // 方块自增 id
+let zIndex = 10;              // 方块层级，越新越高
+let records = [];             // 全部历史战绩
+let showAllRecords = false;   // 侧边栏是否展开完整记录
+let highlightRecordId = null; // 需要在侧边栏高亮的记录
+let aiRunning = false;        // AI 是否正在自动演示
+let aiTimer = null;           // AI 的定时器
+let aiStats = { depth: 0, nodes: 0, bestTile: 0 };
+
+const el = {};                // 缓存常用 DOM 节点
+
+/* ==========================================================================
+ * 4. 渲染：方块 DOM 与配色
+ * ==========================================================================*/
+
+/** 计算方块配色（渐变底色 + 文字色 + 是否加阴影） */
+function tileStyleOf(value) {
+  return TILE_STYLE[value] || TILE_STYLE_HIGH;
+}
+
+/** 用 left / top 摆放方块；因为 CSS 对 left/top 设置了 transition，改变它就会滑动 */
+function placeTile(tile) {
+  const step = 'calc(25% + var(--gap) * 0.25)';   // 每格步长 = 一格宽 + 一个缝隙
+  tile.el.style.left = `calc(${tile.col} * ${step})`;
+  tile.el.style.top = `calc(${tile.row} * ${step})`;
+}
+
+/**
+ * 创建一个方块对象（同时生成它的 DOM 元素）。
+ * kind：'new' 新出现（带弹出动画）、'merged' 合并产生、null 普通重建
+ */
+function createTile(value, row, col, kind) {
+  const style = tileStyleOf(value);
+  const node = document.createElement('div');
+  node.className = 'tile'
+    + (style.shadow === 'strong' ? ' tile--shadow-strong' : (style.shadow ? ' tile--shadow' : ''));
+  if (kind === 'new') node.classList.add('tile--new');
+  if (kind === 'merged') node.classList.add('tile--merged');
+  node.textContent = String(value);
+  node.dataset.value = String(value);
+  node.dataset.len = String(String(value).length);
+  node.style.background = `linear-gradient(135deg, ${style.from}, ${style.to})`;
+  node.style.color = style.text;
+  node.style.zIndex = String(++zIndex);
+
+  const tile = { id: ++uid, value, row, col, el: node };
+  placeTile(tile);
+  el.tileLayer.appendChild(node);
+  return tile;
+}
+
+/** 把二维数字数组和方块对象对应起来（读棋盘用） */
+function currentValues() {
+  const values = [];
+  for (let r = 0; r < SIZE; r++) {
+    const row = [];
+    for (let c = 0; c < SIZE; c++) row.push(board[r][c] ? board[r][c].value : 0);
+    values.push(row);
+  }
+  return values;
+}
+
+/* 合并后被“吃掉”的旧方块要等滑行动画播完才能从 DOM 里删掉。
+   如果玩家手速很快（或 AI 高速演示），下一步可能在 120ms 之内就发生了，
+   所以这里维护一个待删除队列：下一步开始时先把上一批清理干净，避免元素堆积。 */
+let pendingRemovals = [];
+let removalTimer = null;
+
+function scheduleRemoval(nodes) {
+  for (const node of nodes) pendingRemovals.push(node);
+  if (removalTimer !== null) clearTimeout(removalTimer);
+  removalTimer = setTimeout(flushRemovals, SLIDE_MS);
+}
+
+function flushRemovals() {
+  if (removalTimer !== null) { clearTimeout(removalTimer); removalTimer = null; }
+  for (const node of pendingRemovals) node.remove();
+  pendingRemovals = [];
+}
+
+/** 空棋盘（全是 null） */
+function emptyBoard() {
+  return Array.from({ length: SIZE }, () => Array.from({ length: SIZE }, () => null));
+}
+
+/** 在随机空格放一个新方块；没有空格就返回 null */
+function addRandomTile(kind) {
+  const empty = [];
+  for (let r = 0; r < SIZE; r++) {
+    for (let c = 0; c < SIZE; c++) if (!board[r][c]) empty.push([r, c]);
+  }
+  if (empty.length === 0) return null;
+  const [r, c] = empty[Math.floor(Math.random() * empty.length)];
+  const value = Math.random() < NEW_TILE_RATE ? 2 : 4;
+  const tile = createTile(value, r, c, kind || 'new');
+  board[r][c] = tile;
+  return tile;
+}
+
+/** 用一组数字重建整张棋盘（撤回 / 初始化时用，不带滑动动画） */
+function rebuildBoard(values) {
+  flushRemovals();                 // 先把待删除的旧方块清掉，再整体重建
+  el.tileLayer.innerHTML = '';
+  board = emptyBoard();
+  for (let r = 0; r < SIZE; r++) {
+    for (let c = 0; c < SIZE; c++) {
+      if (values[r][c] > 0) board[r][c] = createTile(values[r][c], r, c, null);
+    }
+  }
+}
+
+/* ==========================================================================
+ * 5. 游戏流程：新游戏 / 走一步 / 撤回 / 结束
+ * ==========================================================================*/
+
+/** 刷新顶部的分数、最高分、步数、局数 */
+function renderStats() {
+  el.statScore.textContent = String(score);
+  el.statBest.textContent = String(best);
+  el.statMoves.textContent = String(moves);
+  el.statRounds.textContent = String(records.length);
+  el.undoCount.textContent = String(undoStack.length);
+  el.btnUndo.disabled = undoStack.length === 0;
+  renderHistorySummary();
+}
+
+/** 分数变化时给分数卡片做一个跳动反馈 */
+function pulseScore() {
+  el.statScoreBox.classList.remove('stat--pulse');
+  void el.statScoreBox.offsetWidth;   // 读取一次布局，强制重启动画
+  el.statScoreBox.classList.add('stat--pulse');
+}
+
+/** 本局已经用掉的时长（结束后固定不再增长） */
+function elapsedMs() {
+  if (roundEnded) return roundFrozenMs;
+  return Date.now() - roundStartAt;
+}
+
+/** 计时器每 250ms 刷新一次显示 */
+function startTimer() {
+  setInterval(() => { el.statTimer.textContent = formatDuration(elapsedMs()); }, 250);
+}
+
+/** 开始新一局：先把上一局收尾（如果还没记入历史），再重置棋盘 */
+function newGame() {
+  stopAI('已开始新游戏');
+  if (!roundEnded && moves > 0) endRound('abandon');   // 中途重开也要留下战绩
+
+  score = 0;
+  moves = 0;
+  won = false;
+  roundEnded = false;
+  roundFrozenMs = 0;
+  roundStartAt = Date.now();
+  undoStack = [];
+  lastSavedRecordId = null;
+  hideOverlay();
+
+  board = emptyBoard();
+  el.tileLayer.innerHTML = '';
+  addRandomTile('new');
+  addRandomTile('new');
+  renderStats();
+  setAiStatus('AI 未启动', false);
+}
+
+/** 判定本局是否结束 / 是否达成 2048 */
+function checkRoundState() {
+  const values = currentValues();
+  if (coreMaxTile(values) >= 2048 && !won) {
+    won = true;
+    stopAI('已合出 2048');
+    showOverlay('win', '达成 2048 ！', `本局得分 ${score}，用时 ${formatDurationCn(elapsedMs())}`, [
+      { text: '继续挑战', primary: true, onClick: hideOverlay },
+      { text: '保存并开新局', onClick: () => { endRound('win'); newGame(); } },
+    ]);
+    return;
+  }
+  if (!coreHasMoves(values)) {
+    stopAI('本局结束');
+    endRound('gameover');
+    showOverlay('over', '本局结束', `得分 ${score} · 最大方块 ${coreMaxTile(values)} · 用时 ${formatDurationCn(elapsedMs())}`, [
+      { text: '撤回一步', onClick: () => undo() },
+      { text: '再来一局', primary: true, onClick: newGame },
+    ]);
+  }
+}
+
+/**
+ * 走一步（人类和 AI 都走这个函数）。
+ * @param dir 'left' | 'right' | 'up' | 'down'
+ * @returns 是否真的走动了
+ */
+function doMove(dir) {
+  if (roundEnded) return false;
+  flushRemovals();                             // 清掉上一批待删除的旧方块
+
+  const plan = coreMoveBoard(currentValues(), dir);
+  if (!plan.moved) return false;               // 该方向走不动，直接忽略
+
+  // 1) 记录快照，供撤回使用
+  undoStack.push({ values: currentValues(), score, moves });
+  if (undoStack.length > 500) undoStack.shift();   // 防止无限增长
+
+  // 2) 按 ops 的顺序搬运方块（顺序是算法保证过的，见 planLine 的注释）
+  const toRemove = [];
+  for (const op of plan.ops) {
+    if (op.kind === 'slide') {
+      const [fr, fc] = op.from;
+      const [tr, tc] = op.to;
+      const tile = board[fr][fc];
+      if (!tile) continue;
+      board[fr][fc] = null;
+      board[tr][tc] = tile;
+      tile.row = tr;
+      tile.col = tc;
+      placeTile(tile);
+      continue;
+    }
+
+    // 合并：两个旧方块先滑到同一格，动画结束后再删掉，同时在该格生成新方块
+    const [a, b] = op.from;
+    const [tr, tc] = op.to;
+    const tileA = board[a[0]][a[1]];
+    const tileB = board[b[0]][b[1]];
+    if (tileA) {
+      board[a[0]][a[1]] = null;
+      tileA.el.style.zIndex = String(zIndex);
+      tileA.row = tr; tileA.col = tc;
+      placeTile(tileA);
+      toRemove.push(tileA.el);
+    }
+    if (tileB) {
+      board[b[0]][b[1]] = null;
+      tileB.el.style.zIndex = String(zIndex);
+      tileB.row = tr; tileB.col = tc;
+      placeTile(tileB);
+      toRemove.push(tileB.el);
+    }
+    board[tr][tc] = createTile(op.value, tr, tc, 'merged');
+  }
+  if (toRemove.length) scheduleRemoval(toRemove);
+
+  // 3) 结算分数 + 新方块
+  score += plan.gained;
+  moves += 1;
+  if (score > best) {
+    best = score;
+    saveBest();
+  }
+  addRandomTile('new');
+  pulseScore();
+  renderStats();
+
+  if (aiRunning) aiStats.bestTile = coreMaxTile(currentValues());
+  checkRoundState();
+  return true;
+}
+
+/** 撤回：从撤回栈里弹出上一个快照并整体还原 */
+function undo() {
+  if (undoStack.length === 0) return;
+  if (roundEnded) {
+    // 死局撤回：把刚刚写进历史的那条记录也一并撤销，让本局“复活”
+    if (lastSavedRecordId) {
+      records = records.filter((r) => r.id !== lastSavedRecordId);
+      lastSavedRecordId = null;
+      persistRecords();
+      highlightRecordId = null;
+      renderHistory();
+    }
+    roundEnded = false;
+    hideOverlay();
+  }
+  const snap = undoStack.pop();
+  score = snap.score;
+  moves = snap.moves;
+  rebuildBoard(snap.values);
+  won = coreMaxTile(snap.values) >= 2048;
+  renderStats();
+  if (aiRunning) aiStats.bestTile = coreMaxTile(currentValues());
+}
+
+/** 结束本局：写入历史记录（同一局只会写一次） */
+function endRound(reason) {
+  if (roundEnded) return;
+  roundEnded = true;
+  roundFrozenMs = Date.now() - roundStartAt;
+
+  const values = currentValues();
+  const maxTile = coreMaxTile(values);
+  const record = {
+    id: `${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    score,
+    maxTile,
+    moves,
+    duration: roundFrozenMs,
+    endedAt: Date.now(),
+    reason,
+    ai: aiStats.mode === 'ai',        // 本局是否由 AI 完成
+    reached1024: maxTile >= 1024,
+    reached2048: maxTile >= 2048,
+  };
+  records.push(record);
+  if (records.length > 200) records = records.slice(-200);
+  lastSavedRecordId = record.id;
+  highlightRecordId = record.id;
+  persistRecords();
+
+  if (score > best) { best = score; saveBest(); }
+  renderStats();
+  renderHistory();
+  setAiStatus('AI 未启动', false);
+}
+
+/* ==========================================================================
+ * 6. 历史战绩与本地存储（localStorage）
+ * ==========================================================================*/
+
+/** 安全读取 localStorage（浏览器禁用本地存储时不能让整个游戏崩掉） */
+function readStore(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw === null ? fallback : JSON.parse(raw);
+  } catch (err) {
+    return fallback;
+  }
+}
+function writeStore(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch (err) { /* 忽略写入失败 */ }
+}
+
+function saveBest() { writeStore(STORAGE_KEYS.best, best); }
+function persistRecords() { writeStore(STORAGE_KEYS.records, records); }
+
+/** 从本地读出最高分与历史战绩 */
+function loadStorage() {
+  const savedBest = readStore(STORAGE_KEYS.best, 0);
+  best = typeof savedBest === 'number' && savedBest > 0 ? savedBest : 0;
+  const saved = readStore(STORAGE_KEYS.records, []);
+  records = Array.isArray(saved) ? saved : [];
+}
+
+/** 侧边栏顶部的小结：总局数 / 最高分 / 平均分 */
+function renderHistorySummary() {
+  el.sumRounds.textContent = String(records.length);
+  el.sumBest.textContent = String(best);
+  const avg = records.length ? Math.round(records.reduce((a, r) => a + r.score, 0) / records.length) : 0;
+  el.sumAvg.textContent = String(avg);
+}
+
+/** 渲染历史记录列表（默认显示最近 10 局，可展开完整记录） */
+function renderHistory() {
+  const list = showAllRecords ? records.slice() : records.slice(-10);
+  list.reverse();                     // 最新的排在最上面
+
+  el.historyList.innerHTML = '';
+  el.historyEmpty.hidden = records.length > 0;
+
+  for (const record of list) {
+    const index = records.indexOf(record) + 1;
+    const li = document.createElement('li');
+    if (record.id === highlightRecordId) li.classList.add('is-new');
+
+    const rk = document.createElement('span');
+    rk.className = 'rk';
+    rk.textContent = `#${index}`;
+
+    const main = document.createElement('span');
+    main.className = 'main';
+    const sc = document.createElement('span');
+    sc.className = 'sc';
+    sc.textContent = `${record.score} 分`;
+    if (record.id === highlightRecordId) {
+      const tag = document.createElement('span');
+      tag.className = 'tag';
+      tag.textContent = '最新';
+      sc.appendChild(tag);
+    }
+    if (record.ai) {
+      const tag = document.createElement('span');
+      tag.className = 'tag tag--ai';
+      tag.textContent = 'AI';
+      sc.appendChild(tag);
+    }
+    const sm = document.createElement('span');
+    sm.className = 'sm';
+    const flag = record.reached2048 ? ' · 2048✓' : (record.reached1024 ? ' · 1024✓' : '');
+    sm.textContent = `最大 ${record.maxTile} · ${record.moves} 步 · ${formatDuration(record.duration)} · ${formatTime(record.endedAt)}${flag}`;
+    main.appendChild(sc);
+    main.appendChild(document.createElement('br'));
+    main.appendChild(sm);
+
+    li.appendChild(rk);
+    li.appendChild(main);
+    el.historyList.appendChild(li);
+  }
+
+  el.btnToggleAll.textContent = showAllRecords ? '只看最近 10 局' : '查看完整记录';
+  renderHistorySummary();
+
+  // 新纪录自动滚动到可视区域
+  const first = el.historyList.querySelector('.is-new');
+  if (first && typeof first.scrollIntoView === 'function') {
+    first.scrollIntoView({ block: 'nearest' });
+  }
+}
+
+/** 清空所有记录（等于把“计分制”整体重置） */
+function resetRecords() {
+  const ok = window.confirm('确定要清空历史最高分与全部战绩记录吗？此操作不可撤销。');
+  if (!ok) return;
+  records = [];
+  best = 0;
+  highlightRecordId = null;
+  lastSavedRecordId = null;
+  persistRecords();
+  saveBest();
+  renderStats();
+  renderHistory();
+}
+
+/* ==========================================================================
+ * 7. 棋盘浮层（本局结束 / 达成 2048）
+ * ==========================================================================*/
+function showOverlay(kind, title, text, buttons) {
+  el.overlayTitle.textContent = title;
+  el.overlayText.textContent = text;
+  el.overlayActions.innerHTML = '';
+  for (const b of buttons) {
+    const btn = document.createElement('button');
+    btn.className = 'btn' + (b.primary ? ' btn--primary' : '');
+    btn.textContent = b.text;
+    btn.addEventListener('click', b.onClick);
+    el.overlayActions.appendChild(btn);
+  }
+  el.boardOverlay.hidden = false;
+}
+function hideOverlay() { el.boardOverlay.hidden = true; }
+
+/* ==========================================================================
+ * 8. 主题切换
+ * ==========================================================================*/
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  el.btnTheme.textContent = theme === 'dark' ? '切换浅色' : '切换深色';
+  writeStore(STORAGE_KEYS.theme, theme);
+}
+function toggleTheme() {
+  const cur = document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
+  applyTheme(cur === 'dark' ? 'light' : 'dark');
+}
+
+/* ==========================================================================
+ * 9. 输入：键盘 + 触屏
+ * ==========================================================================*/
+const KEY_MAP = {
+  ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down',
+  a: 'left', A: 'left', d: 'right', D: 'right', w: 'up', W: 'up', s: 'down', S: 'down',
+};
+
+function bindKeyboard() {
+  window.addEventListener('keydown', (event) => {
+    // Ctrl + Z 撤回
+    if ((event.ctrlKey || event.metaKey) && (event.key === 'z' || event.key === 'Z')) {
+      event.preventDefault();
+      undo();
+      return;
+    }
+    const dir = KEY_MAP[event.key];
+    if (!dir) return;
+    event.preventDefault();          // 阻止方向键滚动页面
+    if (aiRunning) return;           // AI 演示时忽略人工输入，避免互相打断
+    doMove(dir);
+  });
+}
+
+/** 触屏滑动：记录起点与终点，位移超过 24px 就判定方向 */
+function bindTouch() {
+  let startX = 0;
+  let startY = 0;
+  let tracking = false;
+
+  el.board.addEventListener('touchstart', (event) => {
+    if (event.touches.length !== 1) return;
+    tracking = true;
+    startX = event.touches[0].clientX;
+    startY = event.touches[0].clientY;
+  }, { passive: true });
+
+  el.board.addEventListener('touchend', (event) => {
+    if (!tracking) return;
+    tracking = false;
+    const touch = event.changedTouches[0];
+    const dx = touch.clientX - startX;
+    const dy = touch.clientY - startY;
+    if (Math.abs(dx) < 24 && Math.abs(dy) < 24) return;
+    if (aiRunning) return;
+    if (Math.abs(dx) > Math.abs(dy)) doMove(dx > 0 ? 'right' : 'left');
+    else doMove(dy > 0 ? 'down' : 'up');
+  }, { passive: true });
+}
+
+/* ==========================================================================
+ * 10. AI 自动演示
+ * ==========================================================================*/
+function setAiStatus(text, running) {
+  el.aiStatus.textContent = text;
+  el.aiDot.classList.toggle('on', !!running);
+  el.btnAI.classList.toggle('btn--on', !!running);
+  el.btnAI.textContent = running ? '停止 AI 演示' : 'AI 自动演示';
+}
+
+function updateAiMeta() {
+  const maxTile = coreMaxTile(currentValues());
+  el.aiMeta.textContent = `深度 ${aiStats.depth} · 节点 ${aiStats.nodes} · 最大方块 ${maxTile} · 目标 1024`;
+}
+
+/** AI 的一步：思考 → 走子 → 排下一次 */
+function aiStep() {
+  if (!aiRunning || roundEnded) { stopAI('已停止'); return; }
+  const speed = AI_SPEED[el.aiSpeed.value] || AI_SPEED.normal;
+
+  const result = aiChooseMove(currentValues(), { timeBudget: speed.budget, maxDepth: 5 });
+  aiStats.depth = result.depth;
+  aiStats.nodes = result.nodes;
+
+  if (!result.dir) { stopAI('无路可走'); return; }
+  const moved = doMove(result.dir);
+  updateAiMeta();
+  if (!moved || roundEnded) { stopAI(roundEnded ? '本局结束' : '已停止'); return; }
+  aiTimer = setTimeout(aiStep, speed.delay);
+}
+
+function startAI() {
+  if (aiRunning) return;
+  if (roundEnded) newGame();
+  aiRunning = true;
+  aiStats = { depth: 0, nodes: 0, bestTile: coreMaxTile(currentValues()), mode: 'ai' };
+  setAiStatus('AI 演示中…（Expectimax 期望最大搜索）', true);
+  updateAiMeta();
+  aiTimer = setTimeout(aiStep, 60);
+}
+
+function stopAI(reason) {
+  if (aiTimer !== null) { clearTimeout(aiTimer); aiTimer = null; }
+  if (aiRunning) {
+    aiRunning = false;
+    setAiStatus(reason ? `AI 已停止：${reason}` : 'AI 未启动', false);
+  }
+}
+
+/* ==========================================================================
+ * 11. 初始化
+ * ==========================================================================*/
+function buildGridBackground() {
+  for (let i = 0; i < SIZE * SIZE; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'cell';
+    el.gridBg.appendChild(cell);
+  }
+}
+
+function bindButtons() {
+  el.btnNew.addEventListener('click', newGame);
+  el.btnUndo.addEventListener('click', undo);
+  el.btnAI.addEventListener('click', () => (aiRunning ? stopAI('手动停止') : startAI()));
+  el.btnTheme.addEventListener('click', toggleTheme);
+  el.btnReset.addEventListener('click', resetRecords);
+  el.btnClearHistory.addEventListener('click', resetRecords);
+  el.btnToggleAll.addEventListener('click', () => {
+    showAllRecords = !showAllRecords;
+    renderHistory();
+  });
+}
+
+function cacheDom() {
+  const ids = [
+    'statScore', 'statBest', 'statTimer', 'statMoves', 'statRounds', 'statScoreBox',
+    'board', 'gridBg', 'tileLayer', 'boardOverlay', 'overlayTitle', 'overlayText', 'overlayActions',
+    'btnNew', 'btnUndo', 'undoCount', 'btnAI', 'aiSpeed', 'btnTheme', 'btnReset',
+    'aiDot', 'aiStatus', 'aiMeta', 'sumRounds', 'sumBest', 'sumAvg',
+    'historyList', 'historyEmpty', 'btnToggleAll', 'btnClearHistory',
+  ];
+  for (const id of ids) el[id] = $(id);
+}
+
+function init() {
+  cacheDom();
+  buildGridBackground();
+  bindButtons();
+  bindKeyboard();
+  bindTouch();
+  startTimer();
+
+  applyTheme(readStore(STORAGE_KEYS.theme, 'light') === 'dark' ? 'dark' : 'light');
+  loadStorage();
+  renderHistory();
+
+  // 首次进入：没有历史记录时直接开一局
+  newGame();
+}
+
+init();
+</script>
+
+</body>
+</html>
