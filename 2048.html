@@ -118,7 +118,11 @@ button, select, input { font-family: inherit; }
   touch-action: none;   /* 触屏滑动时禁止页面跟着滚动 */
 }
 .grid-bg {
-  position: absolute; inset: var(--pad);
+  /* 用 top/right/bottom/left 四个方向属性，而不用 inset 简写：
+     效果完全一样，但简写复用 top 的取值定义，部分工具（含 WebStorm 的 CSS 检查）
+     对这种写法支持不完整，会误报“属性值不匹配”。 */
+  position: absolute;
+  top: var(--pad); right: var(--pad); bottom: var(--pad); left: var(--pad);
   display: grid; grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(4, 1fr);
   gap: var(--gap);
 }
@@ -128,7 +132,11 @@ button, select, input { font-family: inherit; }
    方块自己会不断自增 z-index（保证新方块盖住旧方块），如果不隔离，
    一局下来总会涨过棋盘浮层的层级，把“本局结束 / 达成 2048”的浮层盖住。
    有了这个上下文，方块之间再比大小也只在方块层内部生效，永远超不过浮层。 */
-.tile-layer { position: absolute; inset: var(--pad); z-index: 1; }
+.tile-layer {
+  position: absolute;
+  top: var(--pad); right: var(--pad); bottom: var(--pad); left: var(--pad);
+  z-index: 1;
+}
 .tile {
   position: absolute; left: 0; top: 0;
   width: calc(25% - var(--gap) * 0.75);
@@ -139,7 +147,6 @@ button, select, input { font-family: inherit; }
   color: #fff;
   user-select: none;
   transition: left var(--slide) ease-in-out, top var(--slide) ease-in-out;
-  will-change: left, top;
 }
 /* 四位数 / 五位数方块字号自动变小，避免溢出 */
 .tile[data-len="1"], .tile[data-len="2"] { font-size: clamp(18px, 7.4vw, 32px); }
@@ -162,7 +169,9 @@ button, select, input { font-family: inherit; }
 
 /* 棋盘上的“本局结束 / 达成 2048”浮层：层级必须高于方块层，保证不被任何方块遮住 */
 .board-overlay {
-  position: absolute; inset: 0; z-index: 5;
+  position: absolute;
+  top: 0; right: 0; bottom: 0; left: 0;
+  z-index: 5;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
   border-radius: var(--radius);
   background: rgba(250, 248, 245, .86);
