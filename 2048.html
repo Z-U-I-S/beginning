@@ -124,7 +124,11 @@ button, select, input { font-family: inherit; }
 }
 .cell { background: var(--cell-bg); border-radius: var(--tile-radius); }
 
-.tile-layer { position: absolute; inset: var(--pad); }
+/* 方块层：z-index 只写 1，是为了让它成为一个独立的“层叠上下文”。
+   方块自己会不断自增 z-index（保证新方块盖住旧方块），如果不隔离，
+   一局下来总会涨过棋盘浮层的层级，把“本局结束 / 达成 2048”的浮层盖住。
+   有了这个上下文，方块之间再比大小也只在方块层内部生效，永远超不过浮层。 */
+.tile-layer { position: absolute; inset: var(--pad); z-index: 1; }
 .tile {
   position: absolute; left: 0; top: 0;
   width: calc(25% - var(--gap) * 0.75);
@@ -156,9 +160,9 @@ button, select, input { font-family: inherit; }
 .tile--new { animation: tile-appear 160ms ease-out var(--slide) both; }
 .tile--merged { animation: tile-merge 200ms ease-out var(--slide) both; }
 
-/* 棋盘上的“本局结束 / 达成 2048”浮层 */
+/* 棋盘上的“本局结束 / 达成 2048”浮层：层级必须高于方块层，保证不被任何方块遮住 */
 .board-overlay {
-  position: absolute; inset: 0; z-index: 50;
+  position: absolute; inset: 0; z-index: 5;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
   border-radius: var(--radius);
   background: rgba(250, 248, 245, .86);
@@ -373,7 +377,7 @@ html[data-theme="dark"] .board-overlay { background: rgba(20, 21, 24, .82); }
         <li><b>移动</b>：按键盘 <span class="kbd">↑</span><span class="kbd">↓</span><span class="kbd">←</span><span class="kbd">→</span> 或 <span class="kbd">W</span><span class="kbd">A</span><span class="kbd">S</span><span class="kbd">D</span>；触屏设备直接在棋盘上滑动。</li>
         <li><b>多次撤回</b>：按 <span class="kbd">Ctrl</span>+<span class="kbd">Z</span> 或点「撤回」，可在本局内连续撤回任意多步（按钮上的数字是剩余可撤回步数）。走成死局也能撤回救回来。</li>
         <li><b>新游戏</b>：开始新一局，并把上一局成绩自动追加到右侧历史记录。</li>
-        <li><b>AI 自动演示</b>：点「AI 自动演示」后由 Expectimax 算法自动操作，全程无需人工干预；可选慢 / 中 / 快三档速度。</li>
+        <li><b>AI 自动演示</b>：点「AI 自动演示」后由 Expectimax 算法自动操作，全程无需人工干预；可选慢 / 中 / 快三档速度（每步之间至少间隔 0.3 秒，保证页面不卡顿）。</li>
         <li><b>主题</b>：「切换深色 / 浅色」一键换肤，刷新后仍然保留所选主题。</li>
         <li><b>重置记录</b>：清空历史最高分与全部战绩（会二次确认）。</li>
       </ul>
@@ -834,10 +838,10 @@ const NEW_TILE_RATE = 0.9;            // 新方块出现 2 的概率（其余是
 /** 数字 → 配色。浅色底上的白字需要加阴影（shadow: true 普通、'strong' 加重） */
 const TILE_STYLE = {
   2:    { from: '#FFFFFF', to: '#FFFFFF', text: '#5f5b56', shadow: false }, // 白色底 → 数字用深灰才看得见
-  4:    { from: '#FEF7F5', to: '#FDEBE7', text: '#FFFFFF', shadow: 'strong' },
-  8:    { from: '#FDE3DC', to: '#FBD3CB', text: '#FFFFFF', shadow: 'strong' },
-  16:   { from: '#FAC3B8', to: '#F8B0A2', text: '#FFFFFF', shadow: 'strong' },
-  32:   { from: '#F79C8B', to: '#F2856F', text: '#FFFFFF', shadow: true },
+  4:    { from: '#FBDCD4', to: '#F9CFC5', text: '#FFFFFF', shadow: 'strong' },
+  8:    { from: '#F7C1B4', to: '#F5B3A4', text: '#FFFFFF', shadow: 'strong' },
+  16:   { from: '#F2A38E', to: '#F0937B', text: '#FFFFFF', shadow: true },
+  32:   { from: '#ED7F68', to: '#EA6E55', text: '#FFFFFF', shadow: true },
   64:   { from: '#F0634C', to: '#E8452F', text: '#FFFFFF', shadow: false }, // 红色
   128:  { from: '#FCF6AF', to: '#FAF08C', text: '#FFFFFF', shadow: true }, // 浅黄
   256:  { from: '#F8E87A', to: '#F6E14F', text: '#FFFFFF', shadow: true },
@@ -848,12 +852,17 @@ const TILE_STYLE = {
 /** 4096 及以上：黑色底 + 白字 */
 const TILE_STYLE_HIGH = { from: '#2b2b2b', to: '#0a0a0a', text: '#FFFFFF', shadow: false };
 
+/* AI 每两步之间至少隔多久（毫秒）。搜索本身是同步计算，会短暂占用主线程，
+   间隔太短会让页面连续卡顿，所以这里设一个 0.3 秒的保底间隔。 */
+const AI_MIN_INTERVAL = 300;
+
 /* 三档速度：delay 是两步之间的间隔（毫秒），budget 是每步的“思考时间上限”。
+   实际间隔会取 delay 与 AI_MIN_INTERVAL 中较大的那个。
    深度 3 的完整搜索大约需要几十毫秒，所以“中”档能稳定跑完深度 3，“快”档接近它。 */
 const AI_SPEED = {
-  slow:   { delay: 300, budget: 350 },
-  normal: { delay: 60,  budget: 150 },
-  fast:   { delay: 15,  budget: 70 },
+  slow:   { delay: 900, budget: 250 },
+  normal: { delay: 400, budget: 120 },
+  fast:   { delay: 300, budget: 60 },
 };
 
 /** 棋盘的“真身”：4×4 的二维数组，每格放一个方块对象或 null */
@@ -1024,6 +1033,7 @@ function newGame() {
   roundStartAt = Date.now();
   undoStack = [];
   lastSavedRecordId = null;
+  zIndex = 10;                 // 新一局重新开始排层级
   hideOverlay();
 
   board = emptyBoard();
@@ -1269,10 +1279,19 @@ function renderHistory() {
   el.btnToggleAll.textContent = showAllRecords ? '只看最近 10 局' : '查看完整记录';
   renderHistorySummary();
 
-  // 新纪录自动滚动到可视区域
+  // 新纪录如果在列表可视范围之外，就滚动列表让它露出来。
+  // 这里不用 scrollIntoView()，因为它会连同整个页面一起滚动，观感很突兀。
+  // 也不用 offsetTop：列表是普通静态元素，offsetTop 的参照物不是列表本身。
+  // 用两个元素相对视口的位置差来算，才和 CSS 定位方式无关、永远正确。
   const first = el.historyList.querySelector('.is-new');
-  if (first && typeof first.scrollIntoView === 'function') {
-    first.scrollIntoView({ block: 'nearest' });
+  if (first) {
+    const boxRect = el.historyList.getBoundingClientRect();
+    const itemRect = first.getBoundingClientRect();
+    if (itemRect.top < boxRect.top) {
+      el.historyList.scrollTop -= boxRect.top - itemRect.top;
+    } else if (itemRect.bottom > boxRect.bottom) {
+      el.historyList.scrollTop += itemRect.bottom - boxRect.bottom;
+    }
   }
 }
 
@@ -1399,7 +1418,9 @@ function aiStep() {
   const moved = doMove(result.dir);
   updateAiMeta();
   if (!moved || roundEnded) { stopAI(roundEnded ? '本局结束' : '已停止'); return; }
-  aiTimer = setTimeout(aiStep, speed.delay);
+  // 间隔取“档位设定”和“保底 0.3 秒”里较大的那个：AI 思考是同步计算，
+  // 连着走会让主线程一直被占用，页面看起来就卡。
+  aiTimer = setTimeout(aiStep, Math.max(AI_MIN_INTERVAL, speed.delay));
 }
 
 function startAI() {

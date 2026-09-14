@@ -124,6 +124,24 @@ window.addEventListener('load', function () {
     })());
     log('除数字 2 外全部方块数字使用白色', [4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096].every(function (v) { return colorOf(v).indexOf(WHITE) >= 0; }));
 
+    // 7.5 4~16 的底色不能太浅，否则白字读不出来（取渐变里较浅的那一端来卡）
+    function lumOf(v) {
+      var m = bgOf(v).match(/rgb\\((\\d+), (\\d+), (\\d+)\\)/);
+      return m ? (0.299 * +m[1] + 0.587 * +m[2] + 0.114 * +m[3]) : 999;
+    }
+    log('数字 4 底色足够深（亮度 < 235）', lumOf(4) < 235, '亮度=' + lumOf(4).toFixed(0));
+    log('数字 8 底色足够深（亮度 < 215）', lumOf(8) < 215, '亮度=' + lumOf(8).toFixed(0));
+    log('数字 16 底色足够深（亮度 < 190）', lumOf(16) < 190, '亮度=' + lumOf(16).toFixed(0));
+
+    // 7.6 图层遮挡：方块会不断自增 z-index，胜利浮层必须始终在它们之上
+    for (var z = 0; z < 400; z++) { createTile(2, 0, 0, null).el.remove(); }
+    showOverlay('win', '图层测试', '检查浮层是否被方块遮住', [{ text: '好', onClick: hideOverlay }]);
+    var rect = el.board.getBoundingClientRect();
+    var hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    var overlayOnTop = hit === el.boardOverlay || el.boardOverlay.contains(hit);
+    log('方块 z-index 涨到 ' + zIndex + ' 时浮层仍在其上方', overlayOnTop, '命中的元素=' + (hit ? hit.className || hit.tagName : 'null'));
+    hideOverlay();
+
     // 8. 一局结束会写入历史，新一局不清零
     var roundBefore = records.length;
     var bestBefore = best;
