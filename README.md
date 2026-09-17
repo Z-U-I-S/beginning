@@ -33,9 +33,10 @@
     <ul>
       <li>LICENSE：为项目添加许可证，防止项目成果被窃取</li>
       <li>GitHub两步验证：</li>
-      <img scr='img/两步验证.png' title="两步验证">
+      <img scr='img/double.png' title="两步验证">
       <li>查证：这个可能有点难找，目前用的模型还没遇到过，但有一些小bug是我检查后修正的，如图：</li>
-      <img scr='img/报错1.png' title='DS写出来的代码显示的报错'>
+      <img scr='img/warning1.png' title='DS写出来的代码显示的报错'>
+      <img scr='img/warning2.png' title='DS写出来的代码显示的报错'>
       <img scr='img/修复.png' title='修复后效果'>
     </ul>
     <li>关键代码：</li>
