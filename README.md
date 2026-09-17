@@ -37,7 +37,7 @@
       <li>查证：这个可能有点难找，目前用的模型还没遇到过，但有一些小bug是我检查后修正的，如图：</li>
       <img src='img/warning1.png' title='DS写出来的代码显示的报错'>
       <img src='img/warning2.png' title='DS写出来的代码显示的报错'>
-      <img src='img/修复.png' title='修复后效果'>
+      <img src='img/restore.png' title='修复后效果'>
     </ul>
     <li>关键代码：</li>
   </ol>
