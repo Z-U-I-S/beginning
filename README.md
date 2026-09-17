@@ -18,8 +18,26 @@
     <li>cd:访问指定目录（文件夹）</li>
     <li>ls/dir:列出当前文件夹内容</li>
     <li>mkdir:创建新文件夹</li>
-    [!NOTE]图片示意：
+    图片示意：
     <img src='img/git.png' title="Git效果图">
+    <li>git 常用命令：</li>
+      <ol>
+        <li>git add .：将更改好的文件存入暂存区</li>
+        <li>git status：查看目录未提交文件状态</li>
+        <li>git commit -m '……'：提交文件至本地仓库</li>
+        <li>git push：推送文件至远程仓库</li>
+        <li>git switch ……：更换到另一个分支</li>
+      </ol>
+  </ol>
+    <li>信息安全意识：</li>
+    <ul>
+      <li>LICENSE：为项目添加许可证，防止项目成果被窃取</li>
+      <li>GitHub两步验证：</li>
+      <img scr='img/double.png' title="两步验证效果">
+      <li>查证：这个可能有点难找，目前用的模型还没遇到过，但有一些小bug是我检查后修正的，如图：</li>
+    </ul>
+    <li>关键代码：</li>
   </ol>
 </ol>
+<h3>4.小游戏</h3>
 
