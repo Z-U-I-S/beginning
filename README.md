@@ -21,7 +21,7 @@
     图片示意：
     <img src='img/git.png' title="Git效果图">
     <li>git 常用命令：</li>
-      <ol>
+      <ol type="1">
         <li>git add .：将更改好的文件存入暂存区</li>
         <li>git status：查看目录未提交文件状态</li>
         <li>git commit -m '……'：提交文件至本地仓库</li>
@@ -35,8 +35,9 @@
       <li>GitHub两步验证：</li>
       <img src='img/double.png' title="两步验证">
       <li>查证：这个可能有点难找，目前用的模型还没遇到过，但有一些小bug是我检查后修正的，如图：</li>
-      <img src='img/warning1.png' title='DS写出来的代码显示的报错'>
-      <img src='img/warning2.png' title='DS写出来的代码显示的报错'>
+      <img src='img/warning1.png' title='DS写出来的代码显示的报错' width="98" height="160">
+      <img src='img/warning2.png' title='DS写出来的代码显示的报错' width="95" height="164">
+      <p>修复后效果：</p>
       <img src='img/restore.png' title='修复后效果'>
     </ul>
     <li>关键代码：</li>
