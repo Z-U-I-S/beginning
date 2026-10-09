@@ -1,74 +1,24 @@
 # -*- coding: utf-8 -*-
-"""
-电路①：RC 低通滤波电路（PySpice 仿真）
-================================================================
-任务书要求交付：
-    1) 自己画的电路图（手绘拍照即可）
-    2) 方波输入 / 输出瞬态波形图      -> rc_transient.png
-    3) 波特图（幅频 + 相频）          -> rc_bode.png
-    4) τ、截止频率的「手算 vs 仿真」表 -> 本脚本在终端打印这些数字
-
-本脚本自定的元件参数：R = 10 kΩ，C = 100 nF
-手算理论值：
-    τ  = R·C       = 10×10³ × 100×10⁻⁹ = 1×10⁻³ s = 1 ms
-    fc = 1/(2πτ)   = 1/(2π×10⁻³) ≈ 159.15 Hz
-
-验证方法（这两招后面两个电路也会用到）：
-    · τ 用「瞬态波形里输出达到终值 63.2% 的时刻」读出；
-    · fc 用「AC 扫频里增益降到 −3 dB 的频率」读出。
-
-运行：python rc_filter.py
-产出：rc_transient.png、rc_bode.png，并在终端打印对比数据。
-================================================================
-"""
-
-# ---- 0. 配置 ngspice 共享库 + 让终端能正常显示中文 ----
-#     必须在 import PySpice 之前执行。原理详见 setup_ngspice.py 的说明。
 from setup_ngspice import setup
-
 setup()
-
 import os
-
 import numpy as np
 import matplotlib
-
-matplotlib.use('Agg')            # 不弹窗口，直接把图存成文件（无界面环境也能跑）
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-
 from PySpice.Spice.Netlist import Circuit
 from PySpice.Unit import *
-
-# 让 matplotlib 能显示中文和负号（否则中文变方块、负号变方框）
 plt.rcParams['font.sans-serif'] = ['Microsoft YaHei', 'SimHei', 'DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False
-
-# 图的输出目录：默认与脚本同目录；可用环境变量 RC_OUT_DIR 指定
 OUT_DIR = os.environ.get('RC_OUT_DIR') or os.path.dirname(os.path.abspath(__file__))
 os.makedirs(OUT_DIR, exist_ok=True)
 
-
 def op_scalar(analysis, node):
-    """把工作点分析结果中的节点电压取成普通 Python 浮点数。
-
-    为什么需要这个函数（实测踩过的坑）：
-        直流工作点分析的结果是"长度为 1 的 WaveForm"对象（形状 (1,)），
-        直接写 float(op['节点名']) 会报
-            TypeError: only 0-dimensional arrays can be converted to Python scalars
-        正确做法：先转 numpy 数组 → 取第 0 个元素 → 再转 float。
-    """
     return float(np.asarray(analysis[node]).ravel()[0])
-
-# ================================================================
-# 1. 元件参数与手算理论值
-# ================================================================
 R_val = 10 @ u_kΩ                # 10 kΩ
 C_val = 100 @ u_nF               # 100 nF
-
-# float(带单位的值) = 换算成国际单位后的普通数字：kΩ -> Ω，nF -> F
 tau_theory = float(R_val) * float(C_val)          # 秒
 fc_theory = 1.0 / (2.0 * np.pi * tau_theory)      # Hz
-
 print('=' * 62)
 print('电路① RC 低通滤波电路')
 print('=' * 62)
@@ -78,13 +28,7 @@ print(f'[理论] fc = 1/(2πRC)   = {fc_theory:.2f} Hz')
 print(f'[理论] 5V 阶跃的 63.2% 点 = {0.632 * 5:.3f} V', end='')
 print(f'  （t = τ 时）')
 print('-' * 62)
-
-# ================================================================
-# 2. 瞬态分析：方波输入 -> 看 RC 充放电，从波形反推 τ
-# ================================================================
 circuit = Circuit('RC Low-Pass Filter')
-
-# 方波源：0V <-> 5V，周期 20ms（高电平 10ms = 10τ，足够充满；低电平 10ms 足够放完）
 circuit.PulseVoltageSource(
     'vin', 'in', circuit.gnd,
     initial_value=0 @ u_V,       # 低电平
@@ -192,23 +136,15 @@ ax2.set_ylabel('相位 / °')
 ax2.set_title('相频特性')
 ax2.legend()
 ax2.grid(alpha=0.3, which='both')
-
 plt.tight_layout()
 plt.savefig(os.path.join(OUT_DIR, 'rc_bode.png'), dpi=150)
 plt.close()
 print(f'[产出] {os.path.join(OUT_DIR, "rc_bode.png")}')
-
-# ================================================================
-# 4. 「手算 vs 仿真」对比表（交付物，直接抄进 README）
-# ================================================================
 print('-' * 62)
-print('表 1  理论值 vs 仿真值（可直接抄进 README）')
+print('表 1  理论值 vs 仿真值')
 print('-' * 62)
 print(f'{"物理量":<14}{"理论值":>14}{"仿真值":>14}{"相对误差":>12}')
 print(f'{"时间常数 τ":<14}{tau_theory*1e3:>12.3f} ms{tau_meas*1e3:>12.3f} ms{err_tau:>11.2f}%')
 print(f'{"截止频率 fc":<14}{fc_theory:>12.2f} Hz{fc_meas:>12.2f} Hz{err_fc:>11.2f}%')
 print('-' * 62)
 print('结论：仿真值由 ngspice 解电路方程得到，与手算公式结果一致，')
-print('      说明手算模型（τ=RC、fc=1/2πRC）正确。')
-print('提示：把上面两张 PNG 和这张表放进 README，再配一张手画电路图，')
-print('      电路① 的交付物就齐了。')

@@ -1,11 +1,20 @@
-# 考核任务仓库
+**写在前面**
+---
+这是考核仓库的README，下文包含了我对每一个考核任务的解析与提交，当然也要在这里写几句话
+<p>终于做完了……不容易啊，任务里面使用AI的部分只有小游戏和电路的几个.py文件，其余文本内容、html标签、本地环境的部署、git的所有提交与GitHub的部署为手搓（包括这个README）</p>
+<p>在完成任务的过程中还是学到了不少新东西的，包括很多命令行操作，电脑系统的安装（说来话长）还有本地环境的部署，其实使用AI还是有点惶恐，在做
+电路的部分时，很多内容其实我都不是很懂，也没有什么基础知识，纯自己在硬啃，今天也是请教了代院长关于放大电路的内容，才知道这个是大二才会学到的
+知识，虽然现在不懂，不过也可以慢慢学吧……这里完成的所有内容，我都尽可能去搞懂了，但还是有一些实在没办法很快理解的部分，请见谅</p>
+<p>↓以下是提交部分↓</p>
+
+考核任务仓库
 ---
 <h3>1.环境准备</h3>
 <p>Ai编程工具使用：Deepseek Harness(部分使用Codex）</p>
 <p>代码编辑器使用：WebStorm（部分使用CLion）</p>
 <h3>2.个人简介</h3>
 <p>PDF文件版：<a href=https://github.com/Z-U-I-S/beginning/blob/main/%E4%B8%AA%E4%BA%BA%E7%AE%80%E5%8E%86.pdf>个人简介</a></p>
-<p>个人网站：<a href=https://github.com/Z-U-I-S/beginning/blob/main/wangye.html>个人网站</a></p>
+<p>个人网站：<a href=https://z-u-i-s.github.io/self-page/>个人网站</a></p>
 <h3>3.通用素养</h3>
 <ol>
   <li>对分支与合并的理解:</li>
@@ -60,18 +69,33 @@
 <p>阶段2：</p>
 <p>612~662行：AI移动操作</p>
 <p>669~876行：AI评估局面并决策操作</p>
+<p>下附游戏截图</p>
+<img src='img/2048AI.png' title='AI'>
+<img src='img/2048pc.png' title='pc'>
+<img src='img/2048phone.jpg' title='手机'>
 <h3>5.电路</h3>
 <ol type="1">
   <li>RC滤波电路</li>
-  <p>--------------------------------------------------------------
-物理量                      理论值           仿真值        相对误差
-时间常数 τ               1.000 ms       1.001 ms       0.11%
-截止频率 fc             159.15 Hz      158.49 Hz       0.42%
---------------------------------------------------------------</p>
+<img src='img/理论值与误差值.png' title='理论值与误差值'>
 <p>理论与误差值</p>
-
+  <img src='img/手画电路.jpg' title='电路图'>
   <img src='img/rc_transient.png' title='波形图'>
   <img src='img/rc_bode.png' title='bode图'>
-  <li></li>
-  <li></li>
+  <li>验证戴维南定理</li>
+  <p><del>我还以为我要考研了</del></p>
+  <img src='img/戴维南电路.jpg' title='手画图'>
+<p>上面的第一个电路图是未接负载的电路（A与A'为端口），下面的是接入RL=1kΩ后的电路</p>
+  <img src='img/戴维南定理数值.png' title='输出表格'>
+  <img src='img/戴维南定理.png' title='输出表格'>
+<p>输出表格如上图</p>
+  <li>放大电路</li>
+<p><del>这里我真学不会，没招了</del></p>
+<p>对照表</p>
+<img src='img/放大电路对照.png' title='输出表格'>
+<p>波形图</p>
+<img src='img/nmos_wave.png' title='波形图'>
+手画图与I_D、V_DS、gm计算与饱和区判断（不知道为什么这里下标打不出来，我模仿AI的）
+<img src='img/放大电路图.jpg' title='手画图'>
+<img src='img/计算.jpg' title='计算'>
 </ol>
+以上
