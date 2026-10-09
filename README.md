@@ -49,20 +49,7 @@
       <p>修复后效果：</p>
       <img src='img/restore.png' title='修复后效果'>
     </ul>
-    <li>关键代码：</li>
 </ol>
-```js
-function lineCoords(dir, i) {
-  const coords = [];
-  for (let j = 0; j < SIZE; j++) {
-    if (dir === 'left')  coords.push([i, j]);            // 行 i：从左到右
-    if (dir === 'right') coords.push([i, SIZE - 1 - j]); // 行 i：从右到左
-    if (dir === 'up')    coords.push([j, i]);            // 列 i：从上到下
-    if (dir === 'down')  coords.push([SIZE - 1 - j, i]); // 列 i：从下到上
-  }
-  return coords;
-}
-```
 <h3>4.小游戏</h3>
 <p>提示词：最难受的来了，因为做这个项目的期间电脑重装了系统，但是我没有保存好API Key，所以之前输的提示词都丢失了，现在只能凭记忆复刻</p>
 <p>第一段：请你按照以下要求，依据传统2048规则，生成一个不依赖其他框架的纯html格式的2048小游戏</p>
