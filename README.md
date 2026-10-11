@@ -48,6 +48,10 @@
       <img src='img/warning2.png' title='DS写出来的代码显示的报错' width="95" height="164">
       <p>修复后效果：</p>
       <img src='img/restore.png' title='修复后效果'>
+      <p>来素材了，前两天上课放了这张图，有同学问豆包图里的人分别是谁</p>
+      <img src='img/AI.jpg' title='豆包乱说'>
+      <p>稍微查了一下，很明显豆包又在一本正经说瞎话了</p>
+      <img src='img/查证.jpg' title='查证'>
     </ul>
 </ol>
 <h3>4.小游戏</h3>
