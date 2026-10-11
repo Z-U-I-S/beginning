@@ -52,6 +52,7 @@
       <img src='img/AI.jpg' title='豆包乱说'>
       <p>稍微查了一下，很明显豆包又在一本正经说瞎话了</p>
       <img src='img/查证.jpg' title='查证'>
+      <img src='img/图.jpg' title='查证'>
     </ul>
 </ol>
 <h3>4.小游戏</h3>
